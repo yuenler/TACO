@@ -20,6 +20,22 @@ We propose a compression framework that leverages text information mainly by tex
 This repository does not contain any image datasets used in the manuscript.<br>
 We used [Kodak](https://r0k.us/graphics/kodak/), [MS-COCO 30k](https://cocodataset.org/#home), and [CLIC](https://www.compression.cc/) datasets  for our main experiments. (Section 4.1. in our paper for details)
 
+### Downloading MS-COCO Dataset
+To download the MS-COCO validation dataset (used for evaluation):
+```bash
+# Run the provided script to download and extract COCO images and annotations
+chmod +x download_val_coco.sh
+./download_val_coco.sh
+```
+
+This script will:
+1. Download the MS-COCO 2014 validation images (~1GB)
+2. Download the MS-COCO 2014 annotations (~240MB)
+3. Extract files to the appropriate directories
+4. Create a compatible caption file for the TACO model
+
+The images will be saved to `coco/val2014/` and the processed caption file to `coco/val2014_captions.json`.
+
 ## How to train
 For training TACO, you can use the following command:
 ```
