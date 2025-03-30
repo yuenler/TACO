@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  taco:
+    build: .
+    volumes:
+      - .:/app
+      - ./coco:/app/coco
+    ports:
+      - "8888:8888"
+    shm_size: '8gb'
+    tty: true
+    stdin_open: true
+    environment:
+      - PYTHONPATH=/app

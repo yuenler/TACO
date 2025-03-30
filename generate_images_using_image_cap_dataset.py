@@ -21,7 +21,8 @@ import pandas as pd
 from tqdm import tqdm
 
 # ============
-device = 'cuda'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"Using device: {device}")
 
 def compute_psnr(a, b):
     mse = torch.mean((a - b)**2).item()
