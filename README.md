@@ -73,6 +73,59 @@ python -u generate_images_using_image_cap_dataset.py --image_folder_root (path f
 ```
 If you want to download checkpoints, click this [link](https://drive.google.com/drive/folders/1zOLRtr3AMJ2KChCDjCeBicI871Pzw28K?usp=drive_link)
 
+## Docker Environment Setup
+For running TACO effectively with GPU acceleration, a Docker environment is recommended. This approach ensures consistent dependencies and optimal performance.
+
+### Prerequisites
+- [Docker](https://www.docker.com/products/docker-desktop/) installed on your system
+- Docker Compose (included with Docker Desktop)
+- NVIDIA GPU with CUDA support
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) (nvidia-docker2)
+
+### Setting Up Docker
+1. The repository includes a `Dockerfile` and `docker-compose.yml` for easy setup:
+
+```bash
+# Build and start the Docker container
+docker-compose up -d
+
+# To view container logs
+docker logs -f taco-taco-1
+```
+
+2. The Docker setup mounts your local TACO directory to `/app` in the container, along with:
+   - `./coco` mounted to `/app/coco` for dataset access
+   - Checkpoint files mounted to `/app/checkpoint`
+
+### GPU Acceleration
+When running on AWS or other GPU-enabled servers, ensure that the GPU is properly configured to be used by the Docker container:
+
+```bash
+# Check if GPU is visible to Docker
+docker exec -it taco-taco-1 nvidia-smi
+```
+
+If you need to specify the platform explicitly (usually not needed on AWS with NVIDIA GPUs):
+```bash
+# Build with specific platform 
+docker-compose build
+
+# Run with specific configuration
+docker-compose up -d
+```
+
+### Running Single Image Compression
+To compress a single image inside the Docker container:
+
+```bash
+docker exec -it taco-taco-1 python run_single_image.py \
+    --image_path coco/val2014/COCO_val2014_000000000042.jpg \
+    --caption "This wire metal rack holds several pairs of shoes and sandals" \
+    --checkpoint checkpoint/lambda_0.0016.pth.tar \
+    --output_dir ./output
+```
+
+
 
 ## Citation
 ```
