@@ -6,6 +6,7 @@ services:
     volumes:
       - .:/app
       - ./coco:/app/coco
+      - ./checkpoint:/app/checkpoint
     ports:
       - "8888:8888"
     shm_size: '8gb'
@@ -13,3 +14,10 @@ services:
     stdin_open: true
     environment:
       - PYTHONPATH=/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
