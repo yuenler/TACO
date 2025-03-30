@@ -1,0 +1,15 @@
+torch>=2.2.0
+torchvision>=0.17.0
+compressai
+transformers
+pytorch-msssim
+lpips
+tqdm
+matplotlib
+pandas
+scipy
+einops
+torch-geometric>=2.3.0
+pillow
+numpy>=1.21.0
+git+https://github.com/openai/CLIP.git
