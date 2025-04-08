@@ -229,7 +229,9 @@ class TACO(CompressionModel):
 
     def decompress(self, strings, shape, text_embeddings=None):
         torch.backends.cudnn.deterministic = True
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
         start_time = time.process_time()
 
         y_strings = strings[0][0]
@@ -282,7 +284,9 @@ class TACO(CompressionModel):
         torch.backends.cudnn.deterministic = False
         x_hat = self.g_s(y_hat)
 
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
         end_time = time.process_time()
 
         cost_time = end_time - start_time

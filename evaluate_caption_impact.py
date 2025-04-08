@@ -145,7 +145,7 @@ def main():
     coco_dir = "./coco"
     val_images_dir = os.path.join(coco_dir, "val2014")
     captions_file = os.path.join(coco_dir, "val2014_captions.json")
-    checkpoint_path = "checkpoint/lambda_0.004.pth.tar"  # Default checkpoint
+    checkpoint_path = "checkpoint/lambda_0.0008.pth.tar"  # Default checkpoint
     num_samples = 20
     
     # Load captions
