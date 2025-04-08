@@ -13,3 +13,4 @@ torch-geometric>=2.3.0
 pillow
 numpy>=1.21.0
 git+https://github.com/openai/CLIP.git
+accelerate
