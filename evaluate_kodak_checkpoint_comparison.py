@@ -243,11 +243,11 @@ def main():
     plt.figure(figsize=(10, 6))
     
     # Data for plotting
-    x_with_caption = [all_results[cp]['with_caption']['avg_bpp'] for cp in checkpoint_paths]
-    y_with_caption = [all_results[cp]['with_caption']['avg_lpips'] for cp in checkpoint_paths]
+    x_with_caption = [all_results[os.path.basename(cp)]['with_caption']['avg_bpp'] for cp in checkpoint_paths]
+    y_with_caption = [all_results[os.path.basename(cp)]['with_caption']['avg_lpips'] for cp in checkpoint_paths]
     
-    x_no_caption = [all_results[cp]['no_caption']['avg_bpp'] for cp in checkpoint_paths]
-    y_no_caption = [all_results[cp]['no_caption']['avg_lpips'] for cp in checkpoint_paths]
+    x_no_caption = [all_results[os.path.basename(cp)]['no_caption']['avg_bpp'] for cp in checkpoint_paths]
+    y_no_caption = [all_results[os.path.basename(cp)]['no_caption']['avg_lpips'] for cp in checkpoint_paths]
     
     # Sort points by BPP for proper line drawing
     with_caption_points = sorted(zip(x_with_caption, y_with_caption))
@@ -266,9 +266,10 @@ def main():
     # Add checkpoint labels
     for i, cp in enumerate(checkpoint_paths):
         lambda_val = extract_lambda_value(cp)
+        cp_basename = os.path.basename(cp)
         plt.annotate(f"λ={lambda_val}", 
-                    (all_results[os.path.basename(cp)]['with_caption']['avg_bpp'], 
-                     all_results[os.path.basename(cp)]['with_caption']['avg_lpips']),
+                    (all_results[cp_basename]['with_caption']['avg_bpp'], 
+                     all_results[cp_basename]['with_caption']['avg_lpips']),
                     textcoords="offset points", 
                     xytext=(0,10), 
                     ha='center')
