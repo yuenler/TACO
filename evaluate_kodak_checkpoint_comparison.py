@@ -239,54 +239,19 @@ def main():
     
     print("\nSaved detailed results to kodak_checkpoint_comparison_results.json")
     
-    # Generate plot
-    plt.figure(figsize=(10, 6))
+    # Print numerical results summary
+    print("\nNumerical Results:")
+    print("-" * 80)
+    print(f"{'Checkpoint':<20} {'Caption Type':<15} {'LPIPS':<10} {'BPP':<10}")
+    print("-" * 80)
     
-    # Data for plotting
-    x_with_caption = [all_results[os.path.basename(cp)]['with_caption']['avg_bpp'] for cp in checkpoint_paths]
-    y_with_caption = [all_results[os.path.basename(cp)]['with_caption']['avg_lpips'] for cp in checkpoint_paths]
+    for checkpoint_name in checkpoint_paths:
+        cp_basename = os.path.basename(checkpoint_name)
+        print(f"{cp_basename:<20} {'With Caption':<15} {all_results[cp_basename]['with_caption']['avg_lpips']:.4f} {all_results[cp_basename]['with_caption']['avg_bpp']:.4f}")
+        print(f"{cp_basename:<20} {'No Caption':<15} {all_results[cp_basename]['no_caption']['avg_lpips']:.4f} {all_results[cp_basename]['no_caption']['avg_bpp']:.4f}")
+        print("-" * 80)
     
-    x_no_caption = [all_results[os.path.basename(cp)]['no_caption']['avg_bpp'] for cp in checkpoint_paths]
-    y_no_caption = [all_results[os.path.basename(cp)]['no_caption']['avg_lpips'] for cp in checkpoint_paths]
-    
-    # Sort points by BPP for proper line drawing
-    with_caption_points = sorted(zip(x_with_caption, y_with_caption))
-    no_caption_points = sorted(zip(x_no_caption, y_no_caption))
-    
-    x_with_caption = [p[0] for p in with_caption_points]
-    y_with_caption = [p[1] for p in with_caption_points]
-    
-    x_no_caption = [p[0] for p in no_caption_points]
-    y_no_caption = [p[1] for p in no_caption_points]
-    
-    # Plot
-    plt.plot(x_with_caption, y_with_caption, 'o-', color='green', linewidth=2, label='With Caption')
-    plt.plot(x_no_caption, y_no_caption, 'o-', color='blue', linewidth=2, label='No Caption')
-    
-    # Add checkpoint labels
-    for i, cp in enumerate(checkpoint_paths):
-        lambda_val = extract_lambda_value(cp)
-        cp_basename = os.path.basename(cp)
-        plt.annotate(f"λ={lambda_val}", 
-                    (all_results[cp_basename]['with_caption']['avg_bpp'], 
-                     all_results[cp_basename]['with_caption']['avg_lpips']),
-                    textcoords="offset points", 
-                    xytext=(0,10), 
-                    ha='center')
-    
-    # Styling
-    plt.xlabel('Bits per pixel (BPP)')
-    plt.ylabel('LPIPS (lower is better) ↓')
-    plt.title('TACO Performance on Kodak Dataset: Caption Impact Across Checkpoints')
-    plt.grid(True, linestyle='--', alpha=0.7)
-    plt.legend()
-    
-    # Save plot
-    plt.savefig('kodak_caption_impact_plot.png', dpi=300, bbox_inches='tight')
-    print("Generated plot saved as kodak_caption_impact_plot.png")
-    
-    # Show plot
-    plt.show()
+    print("\nTo generate plots, run: python plot_kodak_checkpoint_comparison.py")
 
 if __name__ == "__main__":
     main()
