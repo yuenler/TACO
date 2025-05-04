@@ -7,6 +7,7 @@ import numpy as np
 import lpips
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import math
 from pathlib import Path
 from transformers import CLIPTextModel, AutoTokenizer
 from tqdm import tqdm
@@ -21,8 +22,8 @@ This script evaluates TACO compression across multiple checkpoints on the Kodak 
 1. With caption (using OFA captions)
 2. Without caption (empty string)
 
-For each checkpoint, it computes average LPIPS and BPP metrics and generates
-a graph plotting LPIPS vs BPP for both scenarios.
+For each checkpoint, it computes average LPIPS, PSNR, and BPP metrics and generates
+a graph plotting LPIPS vs BPP and PSNR vs BPP for both scenarios.
 """
 
 # Setup device
@@ -33,6 +34,11 @@ print(f"Using device: {device}")
 loss_fn_alex = lpips.LPIPS(net='alex')
 loss_fn_alex = loss_fn_alex.to(device)
 loss_fn_alex.requires_grad_(False)
+
+def compute_psnr(a, b):
+    """Calculate Peak Signal-to-Noise Ratio between two images"""
+    mse = torch.mean((a - b)**2).item()
+    return -10 * math.log10(mse)
 
 def load_model(checkpoint_path):
     """
@@ -106,7 +112,7 @@ def process_caption(caption, tokenizer, text_model):
 def compress_and_evaluate(net, image, x_padded, original_size, text_embeddings):
     """
     Compress image using provided model and text embeddings,
-    then decompress and calculate LPIPS score
+    then decompress and calculate LPIPS score and PSNR
     """
     # Compress
     out_enc = net.compress(x_padded, text_embeddings)
@@ -134,11 +140,14 @@ def compress_and_evaluate(net, image, x_padded, original_size, text_embeddings):
     # Calculate LPIPS
     lpips_score = loss_fn_alex(image, x_hat).item()
     
+    # Calculate PSNR
+    psnr_score = compute_psnr(image, x_hat)
+    
     # Clean up
     if os.path.exists(output_file):
         os.remove(output_file)
     
-    return lpips_score, bpp
+    return lpips_score, psnr_score, bpp
 
 def evaluate_checkpoint(checkpoint_path, image_files, captions_data, kodak_dir):
     """
@@ -149,8 +158,8 @@ def evaluate_checkpoint(checkpoint_path, image_files, captions_data, kodak_dir):
     
     # Results containers
     results = {
-        "with_caption": {"lpips": [], "bpp": []},
-        "no_caption": {"lpips": [], "bpp": []}
+        "with_caption": {"lpips": [], "psnr": [], "bpp": []},
+        "no_caption": {"lpips": [], "psnr": [], "bpp": []}
     }
     
     # Process each image in the Kodak dataset
@@ -163,14 +172,16 @@ def evaluate_checkpoint(checkpoint_path, image_files, captions_data, kodak_dir):
         
         # 1. Compress with correct caption
         text_embeddings = process_caption(correct_caption, tokenizer, text_model)
-        lpips_score, bpp = compress_and_evaluate(net, x, x_padded, original_size, text_embeddings)
+        lpips_score, psnr_score, bpp = compress_and_evaluate(net, x, x_padded, original_size, text_embeddings)
         results["with_caption"]["lpips"].append(lpips_score)
+        results["with_caption"]["psnr"].append(psnr_score)
         results["with_caption"]["bpp"].append(bpp)
         
         # 2. Compress with no caption
         text_embeddings = process_caption("", tokenizer, text_model)
-        lpips_score, bpp = compress_and_evaluate(net, x, x_padded, original_size, text_embeddings)
+        lpips_score, psnr_score, bpp = compress_and_evaluate(net, x, x_padded, original_size, text_embeddings)
         results["no_caption"]["lpips"].append(lpips_score)
+        results["no_caption"]["psnr"].append(psnr_score)
         results["no_caption"]["bpp"].append(bpp)
     
     # Calculate averages
@@ -178,12 +189,16 @@ def evaluate_checkpoint(checkpoint_path, image_files, captions_data, kodak_dir):
         "with_caption": {
             "avg_lpips": float(np.mean(results["with_caption"]["lpips"])),
             "std_lpips": float(np.std(results["with_caption"]["lpips"])),
+            "avg_psnr": float(np.mean(results["with_caption"]["psnr"])),
+            "std_psnr": float(np.std(results["with_caption"]["psnr"])),
             "avg_bpp": float(np.mean(results["with_caption"]["bpp"])),
             "std_bpp": float(np.std(results["with_caption"]["bpp"]))
         },
         "no_caption": {
             "avg_lpips": float(np.mean(results["no_caption"]["lpips"])),
             "std_lpips": float(np.std(results["no_caption"]["lpips"])),
+            "avg_psnr": float(np.mean(results["no_caption"]["psnr"])),
+            "std_psnr": float(np.std(results["no_caption"]["psnr"])),
             "avg_bpp": float(np.mean(results["no_caption"]["bpp"])),
             "std_bpp": float(np.std(results["no_caption"]["bpp"]))
         }
@@ -230,8 +245,8 @@ def main():
         all_results[checkpoint_name] = results
         
         print(f"Results for {checkpoint_name}:")
-        print(f"  With Caption: LPIPS={results['with_caption']['avg_lpips']:.4f}, BPP={results['with_caption']['avg_bpp']:.4f}")
-        print(f"  No Caption: LPIPS={results['no_caption']['avg_lpips']:.4f}, BPP={results['no_caption']['avg_bpp']:.4f}")
+        print(f"  With Caption: LPIPS={results['with_caption']['avg_lpips']:.4f}, PSNR={results['with_caption']['avg_psnr']:.4f}, BPP={results['with_caption']['avg_bpp']:.4f}")
+        print(f"  No Caption: LPIPS={results['no_caption']['avg_lpips']:.4f}, PSNR={results['no_caption']['avg_psnr']:.4f}, BPP={results['no_caption']['avg_bpp']:.4f}")
     
     # Save results to JSON
     with open("kodak_checkpoint_comparison_results.json", "w") as f:
@@ -241,15 +256,15 @@ def main():
     
     # Print numerical results summary
     print("\nNumerical Results:")
-    print("-" * 80)
-    print(f"{'Checkpoint':<20} {'Caption Type':<15} {'LPIPS':<10} {'BPP':<10}")
-    print("-" * 80)
+    print("-" * 100)
+    print(f"{'Checkpoint':<20} {'Caption Type':<15} {'LPIPS':<10} {'PSNR':<10} {'BPP':<10}")
+    print("-" * 100)
     
     for checkpoint_name in checkpoint_paths:
         cp_basename = os.path.basename(checkpoint_name)
-        print(f"{cp_basename:<20} {'With Caption':<15} {all_results[cp_basename]['with_caption']['avg_lpips']:.4f} {all_results[cp_basename]['with_caption']['avg_bpp']:.4f}")
-        print(f"{cp_basename:<20} {'No Caption':<15} {all_results[cp_basename]['no_caption']['avg_lpips']:.4f} {all_results[cp_basename]['no_caption']['avg_bpp']:.4f}")
-        print("-" * 80)
+        print(f"{cp_basename:<20} {'With Caption':<15} {all_results[cp_basename]['with_caption']['avg_lpips']:.4f} {all_results[cp_basename]['with_caption']['avg_psnr']:.4f} {all_results[cp_basename]['with_caption']['avg_bpp']:.4f}")
+        print(f"{cp_basename:<20} {'No Caption':<15} {all_results[cp_basename]['no_caption']['avg_lpips']:.4f} {all_results[cp_basename]['no_caption']['avg_psnr']:.4f} {all_results[cp_basename]['no_caption']['avg_bpp']:.4f}")
+        print("-" * 100)
     
     print("\nTo generate plots, run: python plot_kodak_checkpoint_comparison.py")
 
