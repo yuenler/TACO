@@ -365,6 +365,9 @@ def main():
     # Process captions
     captions = [
         caption,  # Main caption
+        "a woman",
+        "a red hat",
+        "a red dress",
         "A scenic landscape with water",  # Generic caption
         ""  # Empty caption
     ]
