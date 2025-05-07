@@ -1,0 +1,1 @@
+Attention map 0 shape: torch.Size([1, 24576, 38])
