@@ -64,8 +64,8 @@ def plot_metric_by_manipulation(df, metric, output_dir='./attention_manipulation
     """Create a grouped bar plot for a specific metric across different manipulation types"""
     plt.figure(figsize=(12, 7))
     
-    # Create a filtered version for visualization - clip extreme values
-    df_plot = df.copy()
+    # Filter out bypass manipulation and create copy for visualization
+    df_plot = df[df['manipulation'] != 'bypass'].copy()
     
     # For PSNR, clip negative values to ensure reasonable visualization
     if metric == 'psnr':
@@ -115,8 +115,11 @@ def plot_metric_by_manipulation(df, metric, output_dir='./attention_manipulation
 
 def plot_heatmap(df, metric, output_dir='./attention_manipulation_plots'):
     """Create a heatmap showing the relative impact of manipulations"""
+    # Filter out the bypass manipulation which has extreme values
+    df_filtered = df[df['manipulation'] != 'bypass']
+    
     # Create a pivot table
-    pivot = df.pivot_table(
+    pivot = df_filtered.pivot_table(
         index='manipulation', 
         columns='checkpoint', 
         values=metric
@@ -211,8 +214,9 @@ def plot_line_comparison(df, metric, output_dir='./attention_manipulation_plots'
         plt.title(f'Skipping BPP vs. BPP plot (redundant)')
         return
     
-    # Filter out extreme values
-    df_plot = df.copy()
+    # Filter out bypass manipulation and extreme values
+    df_plot = df[df['manipulation'] != 'bypass'].copy()
+    
     # Filter out the extremely high BPP values that mess up the scale
     df_plot = df_plot[df_plot['bpp'] < 10]
     
@@ -285,8 +289,11 @@ def plot_line_comparison(df, metric, output_dir='./attention_manipulation_plots'
 
 def create_radar_chart(df, output_dir='./attention_manipulation_plots'):
     """Create a radar chart to compare manipulations across all metrics"""
+    # Filter out bypass manipulation
+    df_filtered = df[df['manipulation'] != 'bypass']
+    
     # Average across all checkpoints
-    avg_by_manipulation = df.groupby('manipulation')[['psnr', 'ms_ssim', 'lpips', 'bpp']].mean()
+    avg_by_manipulation = df_filtered.groupby('manipulation')[['psnr', 'ms_ssim', 'lpips', 'bpp']].mean()
     
     # Normalize metrics to [0, 1] for radar chart
     # For LPIPS, lower is better, so we invert it
@@ -350,13 +357,21 @@ def create_radar_chart(df, output_dir='./attention_manipulation_plots'):
 
 def create_manipulation_summary(df, output_dir='./attention_manipulation_plots'):
     """Create a summary visualization showing the overall impact of manipulations"""
+    # Filter out bypass manipulation which distorts the visualization
+    df_filtered = df[df['manipulation'] != 'bypass']
+    
     # Calculate percentage difference from baseline for each checkpoint and metric
     metrics = ['psnr', 'ms_ssim', 'lpips', 'bpp']
     summary_data = []
     
-    for checkpoint in df['checkpoint'].unique():
-        checkpoint_data = df[df['checkpoint'] == checkpoint]
-        baseline = checkpoint_data[checkpoint_data['manipulation'] == 'baseline'].iloc[0]
+    for checkpoint in df_filtered['checkpoint'].unique():
+        checkpoint_data = df_filtered[df_filtered['checkpoint'] == checkpoint]
+        baseline_rows = checkpoint_data[checkpoint_data['manipulation'] == 'baseline']
+        
+        if len(baseline_rows) == 0:
+            continue
+            
+        baseline = baseline_rows.iloc[0]
         
         for _, row in checkpoint_data.iterrows():
             if row['manipulation'] != 'baseline':
@@ -423,11 +438,17 @@ def create_manipulation_summary(df, output_dir='./attention_manipulation_plots')
     # Add horizontal line at y=0
     for ax in g.axes.flat:
         ax.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+        
+        # Set xticks first, then set xticklabels to avoid warning
+        xticks = range(len(ax.get_xticklabels()))
+        ax.set_xticks(xticks)
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
         
-        # Remove duplicate legends
+        # Remove duplicate legends - safely check if legend exists first
         if ax.get_subplotspec().colspan.start != 0:
-            ax.get_legend().remove()
+            legend = ax.get_legend()
+            if legend is not None:
+                legend.remove()
     
     g.fig.suptitle('Impact of Attention Manipulations (% Change from Baseline)', fontsize=16)
     plt.tight_layout()
