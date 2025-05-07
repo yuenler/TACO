@@ -329,6 +329,17 @@ def main():
         
         # Load model
         model = TACO(taco_config, text_embedding_dim=clip_model.config.hidden_size)
+        
+        # Monkey patch to avoid CompressionModel.__init__ error
+        original_init = model.__init__
+        
+        def fixed_init(*args, **kwargs):
+            # Skip the problematic CompressionModel.__init__ call
+            pass
+        
+        # Apply the monkey patch
+        model.__init__ = fixed_init
+        
         checkpoint = torch.load(checkpoint_file, map_location=device)
         
         # Load state dict
@@ -351,6 +362,10 @@ def main():
             
             # Create a fresh copy of the model for each manipulation
             eval_model = TACO(taco_config, text_embedding_dim=clip_model.config.hidden_size)
+            
+            # Apply the same monkey patch to avoid init error
+            eval_model.__init__ = fixed_init
+            
             eval_model.load_state_dict(model.state_dict())
             eval_model = eval_model.to(device)
             eval_model.eval()
