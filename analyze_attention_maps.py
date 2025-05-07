@@ -188,9 +188,14 @@ def main():
             CLIP_text_model.config.hidden_size
         ).to(device)
         
-        # Set this as our "model" just for attention visualization
-        net = type('SimpleModel', (), {})()
-        net.g_a = model_encoder
+        # Create a proper nn.Module-based class
+        class SimpleModel(torch.nn.Module):
+            def __init__(self, encoder):
+                super().__init__()
+                self.g_a = encoder
+                
+        # Set this as our "model" for attention visualization
+        net = SimpleModel(model_encoder)
         
         print("Created simplified model for attention visualization only")
     
@@ -235,8 +240,7 @@ def main():
     print("\nSetting up attention visualization...")
     print("This simplified approach will only visualize attention patterns without compressing/decompressing")
     
-    # Find and register hooks specifically for the MultiheadAttention modules 
-    # inside Injectors and Extractors
+    # Find and register hooks for all cross-attention modules
     injector_hooks = []
     extractor_hooks = []
     injector_attention_hooks = []
@@ -246,20 +250,41 @@ def main():
     print("Finding attention modules in model...")
     found_modules = False
     
+    # Debug: print all module types to see what we have
+    print("Model structure:")
+    module_types = set()
+    for name, module in net.named_modules():
+        module_type = type(module).__name__
+        module_types.add(module_type)
+        # Print the first few modules for debugging
+        if len(module_types) < 10:
+            print(f"  {name}: {module_type}")
+    
+    print(f"Module types found: {', '.join(module_types)}")
+    
+    # Now register hooks on the attention modules
     for name, module in net.named_modules():
         if isinstance(module, Injector):
             found_modules = True
             hook = CrossAttentionHook(f"Injector-{len(injector_hooks)}")
-            injector_hooks.append(module.cross_attn.register_forward_hook(hook))
-            injector_attention_hooks.append(hook)
-            print(f"Registered hook on Injector: {name}")
+            try:
+                injector_hooks.append(module.cross_attn.register_forward_hook(hook))
+                injector_attention_hooks.append(hook)
+                print(f"Registered hook on Injector: {name}")
+            except AttributeError as e:
+                print(f"Error registering hook on Injector {name}: {e}")
+                print(f"Module structure: {dir(module)}")
         
         elif isinstance(module, Extractor):
             found_modules = True
             hook = CrossAttentionHook(f"Extractor-{len(extractor_hooks)}")
-            extractor_hooks.append(module.cross_attn.register_forward_hook(hook))
-            extractor_attention_hooks.append(hook)
-            print(f"Registered hook on Extractor: {name}")
+            try:
+                extractor_hooks.append(module.cross_attn.register_forward_hook(hook))
+                extractor_attention_hooks.append(hook)
+                print(f"Registered hook on Extractor: {name}")
+            except AttributeError as e:
+                print(f"Error registering hook on Extractor {name}: {e}")
+                print(f"Module structure: {dir(module)}")
     
     if not found_modules:
         print("WARNING: Could not find any Injector or Extractor modules in the model!")
@@ -295,6 +320,16 @@ def main():
         
         try:
             with torch.no_grad():
+                # Print the model structure to be sure
+                if hasattr(net, 'g_a'):
+                    print(f"Model has g_a attribute of type: {type(net.g_a).__name__}")
+                    
+                    # Check for forward method
+                    if hasattr(net.g_a, 'forward'):
+                        print("g_a has forward method")
+                    else:
+                        print("g_a does not have forward method!")
+                    
                 # Only run the encoder (g_a) since that contains the attention mechanisms
                 # This avoids any issues with the full compression process
                 _ = net.g_a(x_padded, text_embeddings)
@@ -309,16 +344,43 @@ def main():
             # If we're using the simplified model approach, we need to manually pass 
             # through each module to capture attention
             try:
-                # Manually examine the structure and try to run it step by step
+                # Find the Injector and Extractor modules directly
+                injectors = []
+                extractors = []
+                
+                print("Looking for Injector and Extractor modules in the encoder...")
                 for name, module in net.g_a.named_modules():
-                    if isinstance(module, Injector) or isinstance(module, Extractor):
-                        # Try a direct forward pass just on this module
-                        if isinstance(module, Injector):
-                            # Create dummy tensors of appropriate shape
-                            print(f"Testing direct forward pass on {name}...")
-                            # We can't actually do this without knowing the exact dimensions
-                            # So we'll just acknowledge the issue
-                            print("Cannot run direct forward pass without knowing expected tensor shapes")
+                    if isinstance(module, Injector):
+                        injectors.append((name, module))
+                    elif isinstance(module, Extractor):
+                        extractors.append((name, module))
+                
+                print(f"Found {len(injectors)} Injectors and {len(extractors)} Extractors")
+                
+                # Try to run the forward pass of the first layer at least to get some data
+                if hasattr(net.g_a, 'analysis_transform') and len(net.g_a.analysis_transform) > 0:
+                    # Try to run just the non-attention layers first
+                    print("Trying to run non-attention layers...")
+                    features = x_padded
+                    
+                    # Find the first attention layer
+                    first_attn_idx = -1
+                    for i, layer in enumerate(net.g_a.analysis_transform):
+                        if isinstance(layer, Injector) or isinstance(layer, Extractor):
+                            first_attn_idx = i
+                            print(f"First attention layer at index {i}")
+                            break
+                    
+                    # Run the layers before the first attention layer
+                    if first_attn_idx > 0:
+                        for i in range(first_attn_idx):
+                            layer = net.g_a.analysis_transform[i]
+                            print(f"Running layer {i}: {type(layer).__name__}")
+                            features = layer(features)
+                        
+                        print("Reached the first attention layer")
+                    else:
+                        print("No regular layers before attention")
             except Exception as inner_e:
                 print(f"Error with direct approach: {inner_e}")
                 print("Unable to capture attention weights for this model")
