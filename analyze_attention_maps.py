@@ -15,6 +15,7 @@ from config.config import model_config
 from models import TACO
 from utils.utils import *
 from modules.transform.analysis import Injector, Extractor
+import torchvision
 
 # Setup device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
