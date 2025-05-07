@@ -56,51 +56,106 @@ def visualize_attention(attention_weights, image, output_dir, caption, module_ty
     plt.savefig(os.path.join(output_dir, f"original_image.png"))
     plt.close()
     
+    # Save raw attention data for debugging
+    with open(os.path.join(output_dir, f"attention_shapes.txt"), "w") as f:
+        for i, attn_map in enumerate(attention_weights):
+            f.write(f"Attention map {i} shape: {attn_map.shape}\n")
+    
     for i, attn_map in enumerate(attention_weights):
-        # Shape: [batch_size, num_heads, seq_len, seq_len]
-        # Average across heads
-        avg_attn = attn_map.mean(dim=1)[0]  # [seq_len, seq_len]
+        # Save raw attention tensor as numpy for later analysis
+        attn_np_file = os.path.join(output_dir, f"attn_raw_{i}.npy")
+        np.save(attn_np_file, attn_map.cpu().numpy())
         
-        if module_type == "Injector":
-            # In Injector: image (query) attends to text (key/value)
-            # Reshape image tokens to 2D
-            h = w = int(np.sqrt(avg_attn.shape[0]))
+        # Handle various attention map shapes
+        print(f"Processing attention map with shape: {attn_map.shape}")
+        
+        # If we have a 4D tensor [batch, heads, q_len, k_len]
+        if len(attn_map.shape) == 4:
+            # Average across heads
+            avg_attn = attn_map.mean(dim=1)[0]  # [q_len, k_len]
+        # If we have a 3D tensor [batch, q_len, k_len]
+        elif len(attn_map.shape) == 3:
+            avg_attn = attn_map[0]  # [q_len, k_len]
+        # If we have a 2D tensor [q_len, k_len] already
+        elif len(attn_map.shape) == 2:
+            avg_attn = attn_map
+        else:
+            print(f"Warning: Unexpected attention map shape: {attn_map.shape}")
+            continue
             
-            # Average attention paid to each text token by each image position
-            text_importance = avg_attn.mean(dim=0)  # [text_seq_len]
+        # Save the attention matrix as an image for reference
+        plt.figure(figsize=(12, 10))
+        plt.imshow(avg_attn.cpu().numpy(), cmap='viridis')
+        plt.colorbar()
+        plt.title(f"{module_type} {i+1}: Attention Matrix\nShape: {avg_attn.shape}")
+        plt.savefig(os.path.join(output_dir, f"{module_type.lower()}{i+1}_attn_matrix.png"))
+        plt.close()
+        
+        try:            
+            if module_type == "Injector":
+                # Try to visualize image-to-text attention
+                try:
+                    # Check if we can interpret dimension 0 as image tokens arranged in 2D
+                    # Only proceed if it seems like image tokens (perfect square)
+                    if avg_attn.shape[0] > 16:  # Likely image tokens if > 16
+                        img_tokens = avg_attn.shape[0]
+                        h = w = int(np.sqrt(img_tokens))
+                        
+                        if h*w == img_tokens:  # Perfect square check
+                            # Average attention to text tokens
+                            if avg_attn.shape[1] > 1:  # Multiple text tokens
+                                text_importance = avg_attn.mean(dim=0)  # [text_seq_len]
+                                
+                                # Plot text token importance if it's not a scalar
+                                plt.figure(figsize=(12, 4))
+                                plt.bar(range(text_importance.shape[0]), text_importance.cpu().numpy())
+                                plt.title(f"Injector {i+1}: Text Token Importance")
+                                plt.xlabel("Text Token Position")
+                                plt.ylabel("Average Attention")
+                                plt.savefig(os.path.join(output_dir, f"injector{i+1}_text_importance.png"))
+                                plt.close()
+                            
+                            # Create attention heatmap (how much each image position attends to text)
+                            attn_to_text = avg_attn.mean(dim=1).reshape(h, w)
+                            plt.figure(figsize=(10, 8))
+                            plt.imshow(attn_to_text.cpu().numpy(), cmap='hot')
+                            plt.colorbar()
+                            plt.title(f"Injector {i+1}: Image Attention to Text")
+                            plt.savefig(os.path.join(output_dir, f"injector{i+1}_image_attn_heatmap.png"))
+                            plt.close()
+                except Exception as e:
+                    print(f"Error visualizing Injector attention: {e}")
             
-            # Plot text token importance
-            plt.figure(figsize=(12, 4))
-            plt.bar(range(len(text_importance)), text_importance.numpy())
-            plt.title(f"Injector {i+1}: Text Token Importance\nCaption: {caption[:30]}...")
-            plt.xlabel("Text Token Position")
-            plt.ylabel("Average Attention")
-            plt.savefig(os.path.join(output_dir, f"injector{i+1}_text_importance.png"))
-            plt.close()
-            
-            # Create attention heatmap (how much each image position attends to text)
-            attn_to_text = avg_attn.mean(dim=1).reshape(h, w)
+            elif module_type == "Extractor":
+                try:
+                    # Try to visualize text-to-image attention
+                    if avg_attn.shape[1] > 16:  # Likely image tokens in dimension 1
+                        img_tokens = avg_attn.shape[1]
+                        h = w = int(np.sqrt(img_tokens))
+                        
+                        if h*w == img_tokens:  # Perfect square check
+                            # Sum attention across text tokens to see which image regions are important
+                            image_importance = avg_attn.sum(dim=0)
+                            
+                            # Reshape to image dimensions
+                            importance_map = image_importance.reshape(h, w)
+                            
+                            plt.figure(figsize=(10, 8)) 
+                            plt.imshow(importance_map.cpu().numpy(), cmap='hot')
+                            plt.colorbar()
+                            plt.title(f"Extractor {i+1}: Image Region Importance")
+                            plt.savefig(os.path.join(output_dir, f"extractor{i+1}_image_importance.png"))
+                            plt.close()
+                except Exception as e:
+                    print(f"Error visualizing Extractor attention: {e}")
+        except Exception as e:
+            print(f"General error in attention visualization: {e}")
+            # At minimum, save the raw attention map
             plt.figure(figsize=(10, 8))
-            plt.imshow(attn_to_text, cmap='hot')
+            plt.imshow(avg_attn.cpu().numpy())
             plt.colorbar()
-            plt.title(f"Injector {i+1}: Image Attention to Text\nCaption: {caption[:30]}...")
-            plt.savefig(os.path.join(output_dir, f"injector{i+1}_image_attn_heatmap.png"))
-            plt.close()
-            
-        elif module_type == "Extractor":
-            # In Extractor: text (query) attends to image (key/value)
-            # Sum attention across text tokens to see which image regions are important
-            image_importance = avg_attn.sum(dim=0)
-            
-            # Reshape to image dimensions
-            h = w = int(np.sqrt(image_importance.shape[0]))
-            importance_map = image_importance.reshape(h, w)
-            
-            plt.figure(figsize=(10, 8)) 
-            plt.imshow(importance_map, cmap='hot')
-            plt.colorbar()
-            plt.title(f"Extractor {i+1}: Image Region Importance\nCaption: {caption[:30]}...")
-            plt.savefig(os.path.join(output_dir, f"extractor{i+1}_image_importance.png"))
+            plt.title(f"Raw Attention Map {i+1}")
+            plt.savefig(os.path.join(output_dir, f"raw_attn_map_{i+1}.png"))
             plt.close()
 
 def main():
