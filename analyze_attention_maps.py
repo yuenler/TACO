@@ -162,11 +162,41 @@ def visualize_attention(attention_weights, image, output_dir, caption, module_ty
                 # Create an overlay on the original image for better interpretation
                 plt.figure(figsize=(12, 10))
                 plt.imshow(img_np)
-                plt.imshow(cv2.resize(spatial_attention, (img_np.shape[1], img_np.shape[0])), 
-                         alpha=0.5, cmap='hot')
+                
+                # Standard overlay with full attention gradient
+                resized_attn = cv2.resize(spatial_attention, (img_np.shape[1], img_np.shape[0]))
+                plt.imshow(resized_attn, alpha=0.5, cmap='hot')
                 plt.colorbar()
                 plt.title(f"{module_type} {i+1}: Attention Overlay")
                 plt.savefig(os.path.join(output_dir, f"{module_type.lower()}{i+1}_attention_overlay.png"))
+                plt.close()
+                
+                # Binary overlay showing only top 5% attention values
+                plt.figure(figsize=(12, 10))
+                plt.imshow(img_np)
+                
+                # Create binary mask with top 5% of attention values
+                threshold = np.percentile(resized_attn, 95)  # 95th percentile = top 5%
+                binary_attn = np.zeros_like(resized_attn)
+                binary_attn[resized_attn >= threshold] = 1.0
+                
+                # Apply binary mask with red color and partial transparency
+                plt.imshow(binary_attn, alpha=0.7, cmap='Reds')
+                plt.title(f"{module_type} {i+1}: Binary Attention (Top 5%)")
+                plt.savefig(os.path.join(output_dir, f"{module_type.lower()}{i+1}_binary_attention_top5.png"))
+                plt.close()
+                
+                # Create visualization with top 10% as well for comparison
+                plt.figure(figsize=(12, 10))
+                plt.imshow(img_np)
+                
+                threshold = np.percentile(resized_attn, 90)  # 90th percentile = top 10%
+                binary_attn = np.zeros_like(resized_attn)
+                binary_attn[resized_attn >= threshold] = 1.0
+                
+                plt.imshow(binary_attn, alpha=0.7, cmap='Reds')
+                plt.title(f"{module_type} {i+1}: Binary Attention (Top 10%)")
+                plt.savefig(os.path.join(output_dir, f"{module_type.lower()}{i+1}_binary_attention_top10.png"))
                 plt.close()
         
         try:            
