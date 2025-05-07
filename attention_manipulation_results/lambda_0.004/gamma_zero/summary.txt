@@ -1,0 +1,5 @@
+Manipulation: gamma_zero
+Average PSNR: 24.1221
+Average MS-SSIM: 0.8871
+Average LPIPS: 0.1573
+Average BPP: 1.0276

@@ -1,0 +1,5 @@
+Manipulation: bypass
+Average PSNR: -39.4713
+Average MS-SSIM: 0.0007
+Average LPIPS: 0.7842
+Average BPP: 27.0734

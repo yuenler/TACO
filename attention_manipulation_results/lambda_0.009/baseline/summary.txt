@@ -1,0 +1,5 @@
+Manipulation: baseline
+Average PSNR: 33.6667
+Average MS-SSIM: 0.9778
+Average LPIPS: 0.0174
+Average BPP: 0.4516

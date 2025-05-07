@@ -1,0 +1,5 @@
+Manipulation: random
+Average PSNR: 31.8892
+Average MS-SSIM: 0.9674
+Average LPIPS: 0.0212
+Average BPP: 0.3226
