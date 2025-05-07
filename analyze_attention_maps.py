@@ -16,6 +16,8 @@ from utils.utils import *
 from modules.transform.analysis import Injector, Extractor
 from modules.transform.context import ChannelContextEX
 from modules.transform.entropy import EntropyParametersEX
+from compressai.models import CompressionModel
+from compressai.entropy_models import EntropyBottleneck, GaussianConditional
 
 # Setup device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
