@@ -262,30 +262,62 @@ def main():
     
     print(f"Module types found: {', '.join(module_types)}")
     
-    # Now register hooks on the attention modules
+    # Now register hooks on the attention modules using class name instead of isinstance
     for name, module in net.named_modules():
-        if isinstance(module, Injector):
+        # Use class name comparison instead of isinstance
+        module_type = type(module).__name__
+        
+        if module_type == "Injector":
             found_modules = True
             hook = CrossAttentionHook(f"Injector-{len(injector_hooks)}")
             try:
-                injector_hooks.append(module.cross_attn.register_forward_hook(hook))
-                injector_attention_hooks.append(hook)
-                print(f"Registered hook on Injector: {name}")
+                print(f"Found Injector module at {name}, checking contents: {dir(module)}")
+                # Check if cross_attn exists
+                if hasattr(module, 'cross_attn'):
+                    injector_hooks.append(module.cross_attn.register_forward_hook(hook))
+                    injector_attention_hooks.append(hook)
+                    print(f"Registered hook on Injector: {name}")
+                else:
+                    print(f"Warning: Injector {name} has no cross_attn attribute, looking for alternatives")
+                    # See if there's any attribute that looks like an attention module
+                    for attr_name in dir(module):
+                        if 'attn' in attr_name.lower():
+                            print(f"  Found potential attention attribute: {attr_name}")
+                            attr = getattr(module, attr_name)
+                            if hasattr(attr, 'register_forward_hook'):
+                                injector_hooks.append(attr.register_forward_hook(hook))
+                                injector_attention_hooks.append(hook)
+                                print(f"  Registered hook on alternative attention: {attr_name}")
+                                break
             except AttributeError as e:
                 print(f"Error registering hook on Injector {name}: {e}")
                 print(f"Module structure: {dir(module)}")
         
-        elif isinstance(module, Extractor):
+        elif module_type == "Extractor":
             found_modules = True
             hook = CrossAttentionHook(f"Extractor-{len(extractor_hooks)}")
             try:
-                extractor_hooks.append(module.cross_attn.register_forward_hook(hook))
-                extractor_attention_hooks.append(hook)
-                print(f"Registered hook on Extractor: {name}")
+                print(f"Found Extractor module at {name}, checking contents: {dir(module)}")
+                # Check if cross_attn exists
+                if hasattr(module, 'cross_attn'):
+                    extractor_hooks.append(module.cross_attn.register_forward_hook(hook))
+                    extractor_attention_hooks.append(hook)
+                    print(f"Registered hook on Extractor: {name}")
+                else:
+                    print(f"Warning: Extractor {name} has no cross_attn attribute, looking for alternatives")
+                    # See if there's any attribute that looks like an attention module
+                    for attr_name in dir(module):
+                        if 'attn' in attr_name.lower():
+                            print(f"  Found potential attention attribute: {attr_name}")
+                            attr = getattr(module, attr_name)
+                            if hasattr(attr, 'register_forward_hook'):
+                                extractor_hooks.append(attr.register_forward_hook(hook))
+                                extractor_attention_hooks.append(hook)
+                                print(f"  Registered hook on alternative attention: {attr_name}")
+                                break
             except AttributeError as e:
                 print(f"Error registering hook on Extractor {name}: {e}")
-                print(f"Module structure: {dir(module)}")
-    
+                print(f"Module structure: {dir(module)}") 
     if not found_modules:
         print("WARNING: Could not find any Injector or Extractor modules in the model!")
         print("Attention maps will not be available.")
