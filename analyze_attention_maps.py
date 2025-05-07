@@ -396,8 +396,10 @@ def main():
     captions = [
         caption,  # Main caption
         "a woman",
-        "a red hat",
-        "a red dress",
+        "red",
+        "eyes",
+        "nose",
+        "mouth",
         "A scenic landscape with water",  # Generic caption
         ""  # Empty caption
     ]
