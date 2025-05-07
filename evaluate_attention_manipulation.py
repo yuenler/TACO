@@ -13,11 +13,27 @@ import torch.nn.functional as F
 import torchvision
 import numpy as np
 import lpips
+import math
 from PIL import Image
 from pytorch_msssim import ms_ssim
 from pathlib import Path
 from transformers import CLIPTextModel, AutoTokenizer
 
+# Patch CompressionModel before importing TACO
+from compressai.models import CompressionModel
+
+# Save the original __init__
+_original_compression_model_init = CompressionModel.__init__
+
+# Create a patched __init__ that doesn't require entropy_bottleneck_channels
+def _patched_compression_model_init(self, *args, **kwargs):
+    # Just initialize nn.Module, skipping CompressionModel's init
+    nn.Module.__init__(self)
+
+# Apply the patch
+CompressionModel.__init__ = _patched_compression_model_init
+
+# Now import TACO with the patched CompressionModel
 from config.config import model_config
 from models import TACO
 from utils.utils import *
@@ -295,6 +311,10 @@ def main():
     # Add import for glob and csv
     import glob
     import csv
+    
+    # Restore original CompressionModel.__init__ when done
+    # (though not strictly necessary for this script)
+    # CompressionModel.__init__ = _original_compression_model_init
     
     # Define manipulation types
     manipulations = ["baseline", "gamma_zero", "constant", "random", "bypass"]
