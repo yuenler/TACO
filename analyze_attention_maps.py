@@ -46,7 +46,7 @@ class CrossAttentionHook:
             self.attn_weights.append(attn_weights)
             self.count += 1
 
-def visualize_attention(attention_weights, image, output_dir, caption, module_type, collect_maps=None):
+def visualize_attention(attention_weights, image, output_dir, caption, module_type):
     """Visualize cross-attention maps between image and text"""
     os.makedirs(output_dir, exist_ok=True)
     
@@ -151,12 +151,6 @@ def visualize_attention(attention_weights, image, output_dir, caption, module_ty
                 
                 # Now reshape and calculate the spatial attention
                 spatial_attention = avg_attn_reshaped.mean(dim=1).reshape(h, w).cpu().numpy()
-                
-                # Store spatial attention maps for cross-caption comparison if requested
-                if collect_maps is not None and caption in collect_maps:
-                    map_key = f"{module_type}_{i+1}"
-                    if map_key not in collect_maps[caption]:
-                        collect_maps[caption][map_key] = spatial_attention
                 
                 plt.figure(figsize=(10, 8))
                 plt.imshow(spatial_attention, cmap='hot')
@@ -375,11 +369,6 @@ def main():
         ""  # Empty caption
     ]
     
-    # Create storage for cross-caption attention analysis
-    all_attentions = {}
-    spatial_maps = {}
-    token_importances = {}
-    
     # Setup for attention visualization only
     print("\nSetting up attention visualization...")
     print("This simplified approach will only visualize attention patterns without compressing/decompressing")
@@ -464,27 +453,36 @@ def main():
                 print(f"Module structure: {dir(module)}") 
     if not found_modules:
         print("WARNING: Could not find any Injector or Extractor modules in the model!")
-    for i, current_caption in enumerate(captions):
-        print(f"\nTesting with caption: '{current_caption}'")
+        print("Attention maps will not be available.")
         
-        # Create output directory for current caption
+    # Process each caption
+    for i, current_caption in enumerate(captions):
         caption_output_dir = os.path.join(output_dir, f"caption_{i}")
         os.makedirs(caption_output_dir, exist_ok=True)
         
-        # Prepare text embeddings
-        print(f"Running encoder to capture attention for caption: '{current_caption}'...")
-        if current_caption:
-            # Tokenize caption
-            caption_tokens = tokenizer(current_caption, return_tensors="pt").to(device)
-            # Get text embeddings from the text encoder
-            with torch.no_grad():
-                text_embeddings = text_model(**caption_tokens).last_hidden_state
-        else:
-            # Empty caption - create a tensor of zeros matching expected shape
-            text_embeddings = torch.zeros((1, 1, 768), device=device)  # Using standard CLIP embedding size of 768
+        print(f"\nTesting with caption: '{current_caption}'")
         
-        # Run through model to capture attention weights
-        # No need to actually compress/decompress
+        # Reset attention hooks for this caption
+        for hook in injector_attention_hooks + extractor_attention_hooks:
+            hook.attn_weights = []
+            hook.count = 0
+        
+        # Process caption
+        if current_caption:
+            clip_token = CLIP_tokenizer([current_caption], padding="max_length", max_length=38, truncation=True, return_tensors="pt").to(device)
+            text_embeddings = CLIP_text_model(**clip_token).last_hidden_state
+        else:
+            # For empty caption, create zero embeddings
+            text_embeddings = torch.zeros((1, 38, CLIP_text_model.config.hidden_size)).to(device)
+        
+        # Save a copy of the original image in this caption's directory
+        orig_img_path = os.path.join(caption_output_dir, "original.png")
+        torchvision.utils.save_image(x, orig_img_path)
+        
+        # Our simplified approach: just run a forward pass through the encoder
+        # to capture attention weights, without doing full compression
+        print(f"Running encoder to capture attention for caption: '{current_caption}'...")
+        
         try:
             with torch.no_grad():
                 # Print the model structure to be sure
@@ -560,7 +558,7 @@ def main():
             if hook.attn_weights:  # Only process if we captured weights
                 print(f"Processing attention from Injector {j} - found {len(hook.attn_weights)} attention maps")
                 injector_dir = os.path.join(caption_output_dir, f"injector_{j}")
-                visualize_attention(hook.attn_weights, x, injector_dir, current_caption, "Injector", spatial_attention_maps)
+                visualize_attention(hook.attn_weights, x, injector_dir, current_caption, "Injector")
             else:
                 print(f"No attention weights captured for Injector {j}")
         
@@ -569,7 +567,7 @@ def main():
             if hook.attn_weights:  # Only process if we captured weights
                 print(f"Processing attention from Extractor {j} - found {len(hook.attn_weights)} attention maps")
                 extractor_dir = os.path.join(caption_output_dir, f"extractor_{j}")
-                visualize_attention(hook.attn_weights, x, extractor_dir, current_caption, "Extractor", spatial_attention_maps)
+                visualize_attention(hook.attn_weights, x, extractor_dir, current_caption, "Extractor")
             else:
                 print(f"No attention weights captured for Extractor {j}")
                 
@@ -578,12 +576,6 @@ def main():
     # Clean up hooks
     for hook in injector_hooks + extractor_hooks:
         hook.remove()
-    
-    # Run comparison analysis across different captions
-    print("\nComparing attention patterns across different captions...")
-    comparison_dir = os.path.join(output_dir, "caption_comparisons")
-    compare_attention_patterns(spatial_attention_maps, comparison_dir)
-    print(f"Comparison results saved to: {comparison_dir}")
     
     print("\nAnalysis complete!")
 
