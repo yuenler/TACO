@@ -1,8 +1,9 @@
 import os
 import torch
-import torchvision
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+from PIL import Image
 from pathlib import Path
 import math
 import lpips
@@ -90,6 +91,47 @@ def visualize_attention(attention_weights, image, output_dir, caption, module_ty
         plt.title(f"{module_type} {i+1}: Attention Matrix\nShape: {avg_attn.shape}")
         plt.savefig(os.path.join(output_dir, f"{module_type.lower()}{i+1}_attn_matrix.png"))
         plt.close()
+        
+        # Create more useful visualizations based on matrix dimensions
+        if avg_attn.shape[1] <= 77:  # If second dimension is likely text tokens (CLIP uses max 77 tokens)
+            # This is probably image -> text attention
+            # Let's create a more meaningful visualization: average attention per text token
+            token_importance = avg_attn.mean(dim=0).cpu().numpy()
+            
+            plt.figure(figsize=(15, 5))
+            plt.bar(range(len(token_importance)), token_importance)
+            plt.title(f"{module_type} {i+1}: Average Attention Per Text Token")
+            plt.xlabel("Text Token Index")
+            plt.ylabel("Average Attention")
+            plt.savefig(os.path.join(output_dir, f"{module_type.lower()}{i+1}_token_importance.png"))
+            plt.close()
+            
+            # Try to visualize spatial attention if we can infer a grid structure
+            # Check if the first dimension could be a square grid (image tokens)
+            img_tokens = avg_attn.shape[0]
+            grid_size = int(np.sqrt(img_tokens))
+            
+            # If it's close to a perfect square, reshape as an image grid
+            if abs(grid_size**2 - img_tokens) / img_tokens < 0.1:  # Within 10% of perfect square
+                # Get average attention across all text tokens for each image position
+                spatial_attention = avg_attn.mean(dim=1).reshape(grid_size, grid_size).cpu().numpy()
+                
+                plt.figure(figsize=(10, 8))
+                plt.imshow(spatial_attention, cmap='hot')
+                plt.colorbar()
+                plt.title(f"{module_type} {i+1}: Spatial Attention Map\nHigher values = more attention to text")
+                plt.savefig(os.path.join(output_dir, f"{module_type.lower()}{i+1}_spatial_map.png"))
+                plt.close()
+                
+                # Create an overlay on the original image for better interpretation
+                plt.figure(figsize=(12, 10))
+                plt.imshow(img_np)
+                plt.imshow(cv2.resize(spatial_attention, (img_np.shape[1], img_np.shape[0])), 
+                         alpha=0.5, cmap='hot')
+                plt.colorbar()
+                plt.title(f"{module_type} {i+1}: Attention Overlay")
+                plt.savefig(os.path.join(output_dir, f"{module_type.lower()}{i+1}_attention_overlay.png"))
+                plt.close()
         
         try:            
             if module_type == "Injector":
