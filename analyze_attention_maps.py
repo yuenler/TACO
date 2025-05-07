@@ -14,6 +14,7 @@ from config.config import model_config
 from models import TACO
 from utils.utils import *
 from modules.transform.analysis import Injector, Extractor
+from modules.layers import ChannelContextEX, EntropyParametersEX
 
 # Setup device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -121,7 +122,63 @@ def main():
     
     # Load TACO model
     taco_config = model_config()
-    net = TACO(taco_config, text_embedding_dim=CLIP_text_model.config.hidden_size)
+    
+    # Create a subclass that fixes the initialization issue
+    class TACO_Fixed(TACO):
+        def __init__(self, config, text_embedding_dim, **kwargs):
+            # Initialize CompressionModel with the required parameter
+            CompressionModel.__init__(self, entropy_bottleneck_channels=config.N)
+            
+            # Continue with normal TACO initialization but skip the super().__init__() call
+            N = config.N
+            M = config.M
+            
+            self.N = N
+            self.M = M
+            self.text_embedding_dim = text_embedding_dim
+            
+            slice_num = config.slice_num
+            slice_ch = config.slice_ch
+            self.quant = config.quant
+            self.slice_num = slice_num
+            self.slice_ch = slice_ch
+            self.g_a = AnalysisTransformEX(N, M, text_embedding_dim, act=nn.ReLU)
+            self.g_s = SynthesisTransformEX(N, M, act=nn.ReLU)
+            self.h_a = HyperAnalysisEX(N, M, act=nn.ReLU)
+            self.h_s = HyperSynthesisEX(N, M, act=nn.ReLU)
+            
+            # Initialize other components from taco.py
+            # Local context model
+            self.local_context = nn.ModuleList(
+                nn.Conv2d(in_channels=slice_ch[i], out_channels=slice_ch[i] * 2, kernel_size=5, stride=1, padding=2)
+                for i in range(len(slice_ch))
+            )
+            
+            # Channel context model
+            self.channel_context = nn.ModuleList(
+                ChannelContextEX(in_dim=sum(slice_ch[:i]), out_dim=slice_ch[i] * 2, act=nn.ReLU) if i else None
+                for i in range(slice_num)
+            )
+            
+            # Entropy parameters
+            self.entropy_parameters_anchor = nn.ModuleList(
+                EntropyParametersEX(in_dim=M * 2 + slice_ch[i] * 2, out_dim=slice_ch[i] * 2, act=nn.ReLU)
+                if i else EntropyParametersEX(in_dim=M * 2, out_dim=slice_ch[i] * 2, act=nn.ReLU)
+                for i in range(slice_num)
+            )
+            
+            self.entropy_parameters_nonanchor = nn.ModuleList(
+                EntropyParametersEX(in_dim=M * 2 + slice_ch[i] * 4, out_dim=slice_ch[i] * 2, act=nn.ReLU)
+                if i else EntropyParametersEX(in_dim=M * 2 + slice_ch[i] * 2, out_dim=slice_ch[i] * 2, act=nn.ReLU)
+                for i in range(slice_num)
+            )
+            
+            # Gaussian conditional and entropy bottleneck
+            self.gaussian_conditional = GaussianConditional(None)
+            self.entropy_bottleneck = EntropyBottleneck(config.N)
+    
+    # Create the fixed model
+    net = TACO_Fixed(taco_config, text_embedding_dim=CLIP_text_model.config.hidden_size)
     net = net.eval().to(device)
     
     # Load checkpoint
