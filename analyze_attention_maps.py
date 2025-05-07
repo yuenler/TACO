@@ -112,10 +112,45 @@ def visualize_attention(attention_weights, image, output_dir, caption, module_ty
             img_tokens = avg_attn.shape[0]
             grid_size = int(np.sqrt(img_tokens))
             
-            # If it's close to a perfect square, reshape as an image grid
-            if abs(grid_size**2 - img_tokens) / img_tokens < 0.1:  # Within 10% of perfect square
+            # For non-perfect squares, we need to find the closest rectangular shape
+            # 24576 could be 192x128 or other combinations
+            # Common aspect ratios: 4:3, 16:9, 3:2, etc
+            possible_shapes = [
+                (192, 128),  # 24576 exactly
+                (256, 96),   # 24576 exactly
+                (384, 64),   # 24576 exactly
+                (512, 48),   # 24576 exactly
+                (156, 157),  # Very close: 24492
+                (128, 192),  # 24576 exactly
+            ]
+            
+            # Find the best shape that matches our tensor size
+            best_shape = None
+            min_diff = float('inf')
+            for h, w in possible_shapes:
+                if abs(h*w - img_tokens) < min_diff:
+                    min_diff = abs(h*w - img_tokens)
+                    best_shape = (h, w)
+            
+            print(f"Best shape for {img_tokens} tokens: {best_shape}")
+            
+            if min_diff < img_tokens * 0.05:  # Within 5% error
                 # Get average attention across all text tokens for each image position
-                spatial_attention = avg_attn.mean(dim=1).reshape(grid_size, grid_size).cpu().numpy()
+                h, w = best_shape
+                
+                # We may need to truncate or pad the tensor slightly
+                required_elements = h * w
+                if required_elements > img_tokens:
+                    # Pad with zeros
+                    padded = torch.zeros(required_elements, avg_attn.shape[1], device=avg_attn.device)
+                    padded[:img_tokens] = avg_attn
+                    avg_attn_reshaped = padded
+                else:
+                    # Truncate
+                    avg_attn_reshaped = avg_attn[:required_elements]
+                
+                # Now reshape and calculate the spatial attention
+                spatial_attention = avg_attn_reshaped.mean(dim=1).reshape(h, w).cpu().numpy()
                 
                 plt.figure(figsize=(10, 8))
                 plt.imshow(spatial_attention, cmap='hot')
